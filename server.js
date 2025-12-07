@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
-const { exec } = require('child_process');
 const fetch = require('node-fetch');
+const dns = require('dns');
 
 const app = express();
 app.use(cors());
@@ -9,42 +9,31 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// Função para ping real
-function pingHost(host) {
+// Função para obter IP via DNS
+function getIP(host) {
     return new Promise((resolve, reject) => {
-        let cmd = "";
-        if (process.platform === "win32") {
-            cmd = `ping -n 1 ${host}`;
-        } else {
-            cmd = `ping -c 1 ${host}`;
-        }
-
-        exec(cmd, (error, stdout, stderr) => {
-            if (error) return reject(stderr || error.message);
-
-            // Tenta extrair o IP do resultado do ping
-            const ipMatch = stdout.match(/\b\d{1,3}(\.\d{1,3}){3}\b/);
-            if (ipMatch) resolve(ipMatch[0]);
-            else resolve(null);
+        dns.lookup(host, (err, address) => {
+            if (err) return reject(err);
+            resolve(address);
         });
     });
 }
 
-// PING de qualquer host externo
+// PING externo (DNS lookup)
 app.get('/ping', async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: "Informe a URL" });
 
     try {
         const host = new URL(url).hostname;
-        const ip = await pingHost(host);
+        const ip = await getIP(host);
         return res.json({ ip });
     } catch (err) {
         return res.status(500).json({ error: err.message });
     }
 });
 
-// PING interno: busca a primeira URL dentro do caminho
+// PING interno (DNS lookup da URL encontrada no caminho)
 app.get('/ping-internal', async (req, res) => {
     const { urlPath } = req.query;
     if (!urlPath) return res.status(400).json({ error: "Informe o caminho interno" });
@@ -59,7 +48,7 @@ app.get('/ping-internal', async (req, res) => {
 
         const internalUrl = urlMatch[0];
         const internalHost = new URL(internalUrl).hostname;
-        const ip = await pingHost(internalHost);
+        const ip = await getIP(internalHost);
 
         return res.json({ ip, url: internalUrl });
     } catch (err) {
