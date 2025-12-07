@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const dns = require('dns');
+const cheerio = require('cheerio');
 
 const app = express();
 app.use(cors());
@@ -32,7 +33,7 @@ app.get('/ping', async (req, res) => {
     }
 });
 
-// Ping interno: pega URLs escritas como texto dentro do HTML (ex: <b>https://exemplo.com</b>)
+// Ping interno com Cheerio
 app.get('/ping-internal', async (req, res) => {
     const { domain } = req.query;
     if (!domain) return res.status(400).json({ error: "Informe o domínio" });
@@ -42,18 +43,19 @@ app.get('/ping-internal', async (req, res) => {
         const response = await fetch(urlPath);
         const html = await response.text();
 
-        // Divide o HTML em linhas
-        const lines = html.split('\n');
-        const urlsWithLine = [];
+        // Carrega HTML com Cheerio
+        const $ = cheerio.load(html);
 
-        lines.forEach((line, index) => {
-            // Remove espaços no início/fim e busca texto que começa com http ou https
-            const match = line.match(/https?:\/\/[^\s"'<>]+/);
+        // Procura por qualquer texto que comece com http:// ou https://
+        const urlsWithLine = [];
+        $('*').each((i, el) => {
+            const text = $(el).text().trim();
+            const match = text.match(/https?:\/\/[^\s"'<>]+/);
             if (match) {
                 urlsWithLine.push({
-                    url: match[0],       // URL encontrada
-                    lineContent: line,   // linha completa, incluindo tags <b>, etc.
-                    lineNumber: index + 1
+                    url: match[0],
+                    lineContent: text,
+                    tag: el.tagName
                 });
             }
         });
@@ -68,8 +70,9 @@ app.get('/ping-internal', async (req, res) => {
 
         return res.json({
             ip,                     // IP da primeira URL
-            url: firstUrl,          // primeira URL
-            lineContent: urlsWithLine[0].lineContent, // linha completa para copiar
+            url: firstUrl,          // primeira URL encontrada
+            lineContent: urlsWithLine[0].lineContent, // texto completo
+            tag: urlsWithLine[0].tag,                 // tag onde estava
             allUrls: urlsWithLine   // todas as URLs encontradas
         });
 
