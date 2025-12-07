@@ -32,23 +32,47 @@ app.get('/ping', async (req, res) => {
     }
 });
 
-// Ping interno (sempre /omni/accounts/configs.php do domínio atual)
+// Ping interno: pega URLs escritas como texto dentro do HTML (ex: <b>https://exemplo.com</b>)
 app.get('/ping-internal', async (req, res) => {
     const { domain } = req.query;
     if (!domain) return res.status(400).json({ error: "Informe o domínio" });
+
     try {
         const urlPath = `https://${domain}/omni/accounts/configs.php`;
         const response = await fetch(urlPath);
         const html = await response.text();
 
-        const urlMatch = html.match(/https?:\/\/[^\s"'<>]+/);
-        if (!urlMatch) return res.json({ ip: null, url: null, msg: "Nenhuma URL encontrada" });
+        // Divide o HTML em linhas
+        const lines = html.split('\n');
+        const urlsWithLine = [];
 
-        const internalUrl = urlMatch[0];
-        const internalHost = new URL(internalUrl).hostname;
-        const ip = await getIP(internalHost);
+        lines.forEach((line, index) => {
+            // Remove espaços no início/fim e busca texto que começa com http ou https
+            const match = line.match(/https?:\/\/[^\s"'<>]+/);
+            if (match) {
+                urlsWithLine.push({
+                    url: match[0],       // URL encontrada
+                    lineContent: line,   // linha completa, incluindo tags <b>, etc.
+                    lineNumber: index + 1
+                });
+            }
+        });
 
-        return res.json({ ip, url: internalUrl });
+        if (!urlsWithLine.length) {
+            return res.json({ ip: null, url: null, msg: "Nenhuma URL encontrada" });
+        }
+
+        const firstUrl = urlsWithLine[0].url;
+        const firstHost = new URL(firstUrl).hostname;
+        const ip = await getIP(firstHost);
+
+        return res.json({
+            ip,                     // IP da primeira URL
+            url: firstUrl,          // primeira URL
+            lineContent: urlsWithLine[0].lineContent, // linha completa para copiar
+            allUrls: urlsWithLine   // todas as URLs encontradas
+        });
+
     } catch (err) {
         return res.status(500).json({ error: err.message });
     }
