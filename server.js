@@ -19,11 +19,10 @@ function getIP(host) {
     });
 }
 
-// PING externo (DNS lookup)
+// Ping externo
 app.get('/ping', async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: "Informe a URL" });
-
     try {
         const host = new URL(url).hostname;
         const ip = await getIP(host);
@@ -33,16 +32,15 @@ app.get('/ping', async (req, res) => {
     }
 });
 
-// PING interno (DNS lookup da URL encontrada no caminho)
+// Ping interno (sempre /omni/accounts/configs.php do domínio atual)
 app.get('/ping-internal', async (req, res) => {
-    const { urlPath } = req.query;
-    if (!urlPath) return res.status(400).json({ error: "Informe o caminho interno" });
-
+    const { domain } = req.query;
+    if (!domain) return res.status(400).json({ error: "Informe o domínio" });
     try {
+        const urlPath = `https://${domain}/omni/accounts/configs.php`;
         const response = await fetch(urlPath);
         const html = await response.text();
 
-        // Procura a primeira URL dentro do conteúdo
         const urlMatch = html.match(/https?:\/\/[^\s"'<>]+/);
         if (!urlMatch) return res.json({ ip: null, url: null, msg: "Nenhuma URL encontrada" });
 
