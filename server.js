@@ -9,7 +9,7 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-// PING real do CMD
+// Função para ping real
 function pingHost(host) {
     return new Promise((resolve, reject) => {
         let cmd = "";
@@ -22,7 +22,7 @@ function pingHost(host) {
         exec(cmd, (error, stdout, stderr) => {
             if (error) return reject(stderr || error.message);
 
-            // tenta extrair o IP do resultado do ping
+            // Tenta extrair o IP do resultado do ping
             const ipMatch = stdout.match(/\b\d{1,3}(\.\d{1,3}){3}\b/);
             if (ipMatch) resolve(ipMatch[0]);
             else resolve(null);
@@ -30,7 +30,7 @@ function pingHost(host) {
     });
 }
 
-// Rota: ping de qualquer host
+// PING de qualquer host externo
 app.get('/ping', async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: "Informe a URL" });
@@ -44,23 +44,24 @@ app.get('/ping', async (req, res) => {
     }
 });
 
-// Rota: ping interno via caminho específico
+// PING interno: busca a primeira URL dentro do caminho
 app.get('/ping-internal', async (req, res) => {
     const { urlPath } = req.query;
     if (!urlPath) return res.status(400).json({ error: "Informe o caminho interno" });
 
     try {
-        // Faz GET da página interna
         const response = await fetch(urlPath);
         const html = await response.text();
 
         // Procura a primeira URL dentro do conteúdo
         const urlMatch = html.match(/https?:\/\/[^\s"'<>]+/);
-        if (!urlMatch) return res.json({ ip: null, msg: "Nenhuma URL encontrada" });
+        if (!urlMatch) return res.json({ ip: null, url: null, msg: "Nenhuma URL encontrada" });
 
-        const internalHost = new URL(urlMatch[0]).hostname;
+        const internalUrl = urlMatch[0];
+        const internalHost = new URL(internalUrl).hostname;
         const ip = await pingHost(internalHost);
-        return res.json({ ip });
+
+        return res.json({ ip, url: internalUrl });
     } catch (err) {
         return res.status(500).json({ error: err.message });
     }
